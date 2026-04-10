@@ -1,58 +1,69 @@
-# 🎯 DJS Committee Insight Platform
+# 🎯  Interactive UX-Focused Public Poll Platform
 
-A full-stack, data-driven platform that aggregates student preferences to rank and analyze all committees at DJSCE using multiple voting systems.
+> ⚠️ **Disclaimer**  
+This project is **not intended to harm, defame, or damage the reputation of any committee , club or team**.  
+It has been built purely as a **learning project** to explore backend development, authentication, and database systems while creating an engaging user experience.  
+All data is **aggregated and anonymous**, and no hate, targeting, or misuse is supported or encouraged in any form , and all displays on the UI-front are purely user-filled data and no personal opinions.
 
 ---
 
 ## 🚀 Overview
 
-This project is a **multi-model preference aggregation system** that collects user opinions through different interaction modes and converts them into meaningful rankings and insights.
+This is an **interactive, UX-focused public polling platform** designed to capture and visualize student sentiment across all committees at DJSCE.
 
-Instead of relying on a single voting method, the platform combines:
-- Pairwise comparisons (Tinder-style)
-- Star ratings (1–5)
-- Tier lists (A–F)
-- Direct rankings
+Instead of traditional static polls, this platform provides a **dynamic and engaging experience**, allowing users to express preferences in multiple intuitive ways. The system then aggregates these inputs into meaningful rankings and insights through a structured backend.
 
-All inputs are processed through a backend ranking engine to generate **dynamic, data-backed insights**.
+The focus is not just on results — but on creating a **fun, interactive, and user-centric polling experience**.
 
 ---
 
 ## 🧠 Key Features
 
-### 🗳️ Multiple Voting Modes
-- **Pairwise (Tinder-style):** Choose between two committees → ELO-based scoring
-- **Star Ratings:** Rate committees from 1 to 5
-- **Tier Lists:** Assign committees to tiers (A–F)
-- **Direct Ranking:** Order committees by preference
+### 🎮 Interactive Voting Modes
+Designed for engagement, not friction:
+
+- **🔥 Swipe Mode (Tinder-style)**  
+  Compare two committees → quick, intuitive decisions
+
+- **⭐ Star Rating**  
+  Simple 1–5 rating system
+
+- **🏆 Tier Lists (A–F)**  
+  Drag and drop committees into tiers
+
+- **📊 Direct Ranking**  
+  Full ordering for detailed preferences
 
 ---
 
-### 📊 Intelligent Rankings
+### 📊 Smart Aggregated Rankings
+All inputs are processed into:
+
 - Global leaderboard
 - Category-wise rankings:
-  - Student Chapters
-  - Tech Committees
-  - Clubs
-  - SAE Teams
-  - IETE Teams
-- Top & bottom committees
+  - Student Chapters  
+  - Tech Committees  
+  - Clubs  
+  - SAE Teams  
+  - IETE Teams  
 - Most loved / least preferred
-- Most controversial (high variance)
+- Most controversial (high disagreement)
+- Comparative insights (e.g., Antariksh vs Arya)
 
 ---
 
-### 🔍 Insights Engine
-- Aggregates multiple data sources into a unified score
-- Detects trends and patterns
-- Enables comparisons (e.g., Antariksh vs Arya)
+### 🧩 Insight-Driven Experience
+- Converts raw opinions into structured insights  
+- Highlights trends and patterns  
+- Surfaces interesting observations across categories  
 
 ---
 
-### 🔒 Anonymous & Fair Voting
-- Session-based user tracking (no login required)
-- Rate limiting & anti-abuse mechanisms
+### 🔒 Anonymous & Safe Participation
+- No login required (session-based identity)
 - No personal data stored
+- Aggregated results only
+- Built with a focus on **responsible usage**
 
 ---
 
@@ -60,15 +71,13 @@ All inputs are processed through a backend ranking engine to generate **dynamic,
 
 ### Frontend
 - **Next.js (React)**
-- Tailwind CSS (optional)
+- Focus on smooth, interactive UX
 
 ### Backend
 - **FastAPI (Python)**
-- RESTful API design
+- Clean API design + business logic layer
 
 ### Database
 - **Supabase (PostgreSQL)**
 
 ---
-
-## 🏗️ Architecture
