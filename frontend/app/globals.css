@@ -1,0 +1,213 @@
+@import url("https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@300;400;500;600&family=Geist:wght@300;400;500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --ink-950: #070707;
+  --ink-900: #0b0b0b;
+  --ink-850: #101010;
+  --ink-800: #161616;
+  --ink-700: #1f1f1f;
+  --ink-600: #2a2a2a;
+  --ink-500: #3a3a3a;
+  --ink-400: #5a5a5a;
+  --ink-300: #8a8a8a;
+  --ink-200: #b4b1a8;
+  --ink-100: #e8e4d8;
+  --ink-50: #f4f1e8;
+  --lime: #d4ff3a;
+  --lime-dim: #a8cc2e;
+  --ember: #ff4d3a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  background: var(--ink-950);
+  color: var(--ink-100);
+  font-family: "Geist", ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  background-image:
+    radial-gradient(ellipse at top, rgba(212, 255, 58, 0.04), transparent 55%),
+    radial-gradient(ellipse at bottom right, rgba(126, 200, 255, 0.025), transparent 50%);
+  min-height: 100vh;
+}
+
+/* Subtle film grain overlay */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.32 0'/></filter><rect width='200' height='200' filter='url(%23n)' opacity='0.55'/></svg>");
+  mix-blend-mode: overlay;
+  opacity: 0.18;
+}
+
+main, header, footer, nav, section { position: relative; z-index: 2; }
+
+::selection {
+  background: var(--lime);
+  color: var(--ink-950);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--ink-900); }
+::-webkit-scrollbar-thumb { background: var(--ink-600); border-radius: 0; }
+::-webkit-scrollbar-thumb:hover { background: var(--ink-500); }
+
+/* Utility: editorial section label */
+.eyebrow {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--ink-300);
+}
+
+.eyebrow-lime { color: var(--lime); }
+
+.divider {
+  height: 1px;
+  background: var(--ink-700);
+}
+
+.divider-bold {
+  height: 1px;
+  background: var(--ink-100);
+}
+
+.hairline {
+  border-color: var(--ink-700);
+}
+
+/* Display heading */
+.display {
+  font-family: "Instrument Serif", ui-serif, Georgia, serif;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 0.95;
+}
+
+.italic-display {
+  font-family: "Instrument Serif", ui-serif, Georgia, serif;
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+/* Big stat number */
+.stat-num {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-feature-settings: "tnum" 1, "ss01" 1;
+  font-weight: 500;
+}
+
+/* Pulsing live dot */
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(0.9); }
+}
+
+.live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--lime);
+  box-shadow: 0 0 0 4px rgba(212, 255, 58, 0.12);
+  animation: live-pulse 1.6s ease-in-out infinite;
+}
+
+/* Marquee */
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+.marquee-track {
+  animation: marquee 60s linear infinite;
+  display: inline-flex;
+  white-space: nowrap;
+}
+
+/* Input styling */
+.input-bare {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--ink-600);
+  color: var(--ink-100);
+  font-family: "JetBrains Mono", monospace;
+  padding: 0.5rem 0;
+  outline: none;
+  transition: border-color 120ms ease;
+}
+
+.input-bare:focus {
+  border-color: var(--lime);
+}
+
+/* Button: primary lime */
+.btn-lime {
+  background: var(--lime);
+  color: var(--ink-950);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  padding: 0.85rem 1.4rem;
+  font-weight: 600;
+  transition: transform 120ms ease, background 120ms ease;
+  border: 1px solid var(--lime);
+}
+
+.btn-lime:hover {
+  background: #e3ff5a;
+  transform: translateY(-1px);
+}
+
+/* Outline button */
+.btn-ghost {
+  background: transparent;
+  color: var(--ink-100);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  padding: 0.85rem 1.4rem;
+  border: 1px solid var(--ink-600);
+  transition: all 120ms ease;
+}
+
+.btn-ghost:hover {
+  border-color: var(--ink-100);
+  color: var(--ink-50);
+}
+
+/* Drag preview cursor */
+.dragging {
+  opacity: 0.4;
+}
+
+.drop-target {
+  outline: 1px dashed var(--lime);
+  outline-offset: -2px;
+}
+
+/* Hide focus outline only when not keyboard nav */
+button:focus-visible,
+a:focus-visible {
+  outline: 1px solid var(--lime);
+  outline-offset: 3px;
+}
