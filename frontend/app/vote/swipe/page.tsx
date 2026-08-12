@@ -1,23 +1,37 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence, PanInfo, useMotionValue, useTransform } from "framer-motion";
 import { ArrowLeft, ArrowRight, SkipForward, Undo2 } from "lucide-react";
 import { COMMITTEES } from "@/lib/constants";
 import type { Committee } from "@/lib/types";
+import { ApiError, ensureSession, submitSwipeVote } from "@/lib/api";
 import { CommitteeImage } from "@/components/CommitteeImage";
 import { CategoryChip } from "@/components/CategoryChip";
 import { VoteHeader } from "@/components/VoteHeader";
 import { Toast } from "@/components/Toast";
+import {
+  trackSwipeSessionComplete,
+  trackSwipeSessionReset,
+  trackSwipeSkip,
+  trackSwipeUndo,
+  trackSwipeVote,
+} from "@/lib/analytics";
 
-/* Build a deterministic pairing list from constants */
+type HistoryEntry = {
+  label: string;
+  winnerId: string | null;
+  loserId: string | null;
+  skipped: boolean;
+  persisted: boolean;
+};
+
 function buildPairs(): [Committee, Committee][] {
   const pairs: [Committee, Committee][] = [];
   const list = [...COMMITTEES];
   for (let i = 0; i < list.length - 1; i += 2) {
     pairs.push([list[i], list[i + 1]]);
   }
-  // some cross-category showdowns
   const crossA = ["arya", "infomatrix", "ieee", "ecell", "racing"];
   const crossB = ["dhadak", "tedx", "acm", "iic", "karting"];
   for (let i = 0; i < crossA.length; i++) {
@@ -31,141 +45,228 @@ function buildPairs(): [Committee, Committee][] {
 export default function SwipePage() {
   const pairs = useMemo(buildPairs, []);
   const [idx, setIdx] = useState(0);
-  const [history, setHistory] = useState<string[]>([]);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [toast, setToast] = useState<{ msg: string; cap?: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const sessionReady = useRef(false);
 
   const current = pairs[idx];
   const next = pairs[idx + 1];
+  const decisions = history.filter((h) => !h.skipped).length;
 
-  const recordVote = (winner: Committee | null, loser: Committee | null) => {
-    if (winner && loser) {
-      setHistory((h) => [`${winner.shortName} > ${loser.shortName}`, ...h].slice(0, 8));
-      setToast({
-        msg: "Vote Recorded",
-        cap: `${winner.shortName} chosen over ${loser.shortName}`,
+  useEffect(() => {
+    ensureSession()
+      .then(() => {
+        sessionReady.current = true;
+      })
+      .catch(() => {
+        setToast({ msg: "API offline", cap: "Start the Pollr API to save votes" });
+        setTimeout(() => setToast(null), 2800);
       });
+  }, []);
+
+  const recordVote = async (
+    winner: Committee | null,
+    loser: Committee | null,
+    method: "swipe" | "button" | "card" = "button"
+  ) => {
+    if (busy) return;
+    setBusy(true);
+
+    if (winner && loser) {
+      trackSwipeVote({
+        winnerId: winner.id,
+        loserId: loser.id,
+        winnerCategory: winner.category,
+        loserCategory: loser.category,
+        pairIndex: idx,
+        method,
+      });
+
+      let persisted = false;
+      try {
+        if (!sessionReady.current) await ensureSession();
+        await submitSwipeVote(winner.id, loser.id);
+        persisted = true;
+        setToast({
+          msg: "Vote Saved",
+          cap: `${winner.shortName} over ${loser.shortName}`,
+        });
+      } catch (err) {
+        const detail = err instanceof ApiError ? err.detail : "Could not save vote";
+        if (err instanceof ApiError && err.status === 409) {
+          persisted = true;
+          setToast({ msg: "Already Voted", cap: "This pair was saved earlier" });
+        } else {
+          setToast({ msg: "Save Failed", cap: detail });
+          setBusy(false);
+          setTimeout(() => setToast(null), 2200);
+          return;
+        }
+      }
+
+      setHistory((h) =>
+        [
+          {
+            label: `${winner.shortName} > ${loser.shortName}`,
+            winnerId: winner.id,
+            loserId: loser.id,
+            skipped: false,
+            persisted,
+          },
+          ...h,
+        ].slice(0, 8)
+      );
     } else {
+      trackSwipeSkip({
+        pairIndex: idx,
+        leftId: current[0].id,
+        rightId: current[1].id,
+      });
+      setHistory((h) =>
+        [
+          {
+            label: `Skipped ${current[0].shortName} vs ${current[1].shortName}`,
+            winnerId: null,
+            loserId: null,
+            skipped: true,
+            persisted: false,
+          },
+          ...h,
+        ].slice(0, 8)
+      );
       setToast({ msg: "Pair Skipped" });
     }
-    setTimeout(() => setToast(null), 1800);
+
     setIdx((i) => Math.min(i + 1, pairs.length - 1));
+    setBusy(false);
+    setTimeout(() => setToast(null), 1800);
   };
 
   const undo = () => {
+    trackSwipeUndo(idx);
     setIdx((i) => Math.max(0, i - 1));
     setHistory((h) => h.slice(1));
+    setToast({ msg: "Undid locally", cap: "Saved votes stay in the tally" });
+    setTimeout(() => setToast(null), 1600);
   };
 
   const isDone = idx >= pairs.length - 1 && history.length > 0;
+  const completedRef = useRef(false);
+
+  useEffect(() => {
+    if (isDone && !completedRef.current) {
+      completedRef.current = true;
+      trackSwipeSessionComplete(decisions, pairs.length);
+    }
+    if (!isDone) completedRef.current = false;
+  }, [isDone, decisions, pairs.length]);
 
   return (
-    <div className="mx-auto max-w-[1440px] px-6 md:px-10">
+    <div className="mx-auto flex min-h-[calc(100dvh-4.75rem)] max-w-[1320px] flex-col px-4 sm:px-6 md:px-10">
       <VoteHeader
-        index="§ MODE 01 · Swipe"
+        index="MODE 01 · Swipe"
         title={
           <>
             Pairwise<span className="italic-display text-lime">.</span>
           </>
         }
-        caption="Two committees enter, one leaves. Each decision feeds the ELO model — fast, intuitive, weighted by relative strength."
+        caption="Two committees enter, one leaves. Each choice adds +50 / −25 to the pairwise Pollr Score — saved anonymously."
         meta={
           <div className="flex items-center justify-end gap-6">
             <Counter label="Pair" value={`${idx + 1} / ${pairs.length}`} />
-            <Counter label="Decisions" value={`${history.length}`} accent />
+            <Counter label="Saved" value={`${decisions}`} accent />
           </div>
         }
       />
 
-      {/* DECK */}
-      <section className="mt-12 grid grid-cols-1 gap-10 md:grid-cols-12">
-        {/* Left rail — instructions / history */}
-        <aside className="md:col-span-3 order-2 md:order-1">
-          <p className="eyebrow mb-4">How to vote</p>
-          <ol className="space-y-3 text-sm text-ink-200">
-            <Tip n="01">Drag the top card LEFT or RIGHT.</Tip>
-            <Tip n="02">Or use the choice buttons below.</Tip>
-            <Tip n="03">Skip if undecided. Votes are anonymous.</Tip>
+      <section className="mt-3 grid min-h-0 flex-1 grid-cols-1 gap-3 pb-2 md:grid-cols-12">
+        <aside className="order-2 flex min-h-0 flex-col overflow-hidden border border-ink-700/80 bg-ink-900/70 p-3 md:order-1 md:col-span-3">
+          <p className="eyebrow mb-3">How to vote</p>
+          <ol className="space-y-2 text-sm text-ink-200">
+            <Tip n="01">Swipe a card outward to vote quickly.</Tip>
+            <Tip n="02">Use the buttons for precise selection.</Tip>
+            <Tip n="03">Skip if uncertain — skips are not scored.</Tip>
           </ol>
 
-          <div className="mt-10">
-            <p className="eyebrow mb-3">Recent decisions</p>
-            <ul className="space-y-2 font-mono text-xs">
-              {history.length === 0 && (
-                <li className="text-ink-400">— No decisions yet —</li>
+          <div className="mt-4 flex min-h-0 flex-1 flex-col border-t border-ink-700/80 pt-3">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="eyebrow">Recent decisions</p>
+              {next && !isDone && (
+                <span className="font-mono text-[10px] uppercase tracking-widest text-ink-400">
+                  Next: {next[0].shortName} vs {next[1].shortName}
+                </span>
               )}
+            </div>
+            <ul className="max-h-[28vh] flex-1 space-y-2 overflow-auto pr-1 font-mono text-xs md:max-h-none">
+              {history.length === 0 && <li className="text-ink-400">No decisions yet.</li>}
               {history.map((h, i) => (
-                <li
-                  key={i}
-                  className="border-b border-ink-700/70 pb-1.5 text-ink-200"
-                >
+                <li key={i} className="border-b border-ink-700/70 pb-1.5 text-ink-200">
                   <span className="text-ink-500">[{String(history.length - i).padStart(2, "0")}]</span>{" "}
-                  {h}
+                  {h.label}
+                  {h.persisted && <span className="ml-1 text-lime">· saved</span>}
                 </li>
               ))}
             </ul>
           </div>
         </aside>
 
-        {/* CARD STAGE */}
-        <div className="md:col-span-9 order-1 md:order-2">
-          {isDone ? (
-            <FinishedState onReset={() => { setIdx(0); setHistory([]); }} />
-          ) : (
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-              <SwipeCard
-                committee={current[0]}
-                side="left"
-                onChoose={() => recordVote(current[0], current[1])}
+        <div className="order-1 flex min-h-0 flex-col md:order-2 md:col-span-9">
+          <div className="flex-1 min-h-0">
+            {isDone ? (
+              <FinishedState
+                onReset={() => {
+                  trackSwipeSessionReset(decisions);
+                  setIdx(0);
+                  setHistory([]);
+                }}
               />
-              <SwipeCard
-                committee={current[1]}
-                side="right"
-                onChoose={() => recordVote(current[1], current[0])}
-              />
-            </div>
-          )}
+            ) : (
+              <div className="grid h-full min-h-0 grid-cols-1 gap-4 md:grid-cols-2">
+                <SwipeCard
+                  committee={current[0]}
+                  side="left"
+                  disabled={busy}
+                  onChoose={(method) => recordVote(current[0], current[1], method)}
+                />
+                <SwipeCard
+                  committee={current[1]}
+                  side="right"
+                  disabled={busy}
+                  onChoose={(method) => recordVote(current[1], current[0], method)}
+                />
+              </div>
+            )}
+          </div>
 
           {!isDone && (
-            <div className="mt-8 grid grid-cols-2 gap-px bg-ink-700/80 md:grid-cols-4">
+            <div className="mt-2 grid grid-cols-2 gap-px bg-ink-700/80 md:grid-cols-4">
               <ActionBtn
-                onClick={() => recordVote(current[0], current[1])}
+                onClick={() => recordVote(current[0], current[1], "button")}
                 icon={<ArrowLeft size={16} />}
                 label="Pick Left"
                 primary
+                disabled={busy}
               />
               <ActionBtn
-                onClick={() => recordVote(null, null)}
+                onClick={() => recordVote(null, null, "button")}
                 icon={<SkipForward size={16} />}
                 label="Skip"
+                disabled={busy}
               />
               <ActionBtn
                 onClick={undo}
                 icon={<Undo2 size={16} />}
                 label="Undo"
-                disabled={idx === 0}
+                disabled={idx === 0 || busy}
               />
               <ActionBtn
-                onClick={() => recordVote(current[1], current[0])}
+                onClick={() => recordVote(current[1], current[0], "button")}
                 icon={<ArrowRight size={16} />}
                 label="Pick Right"
                 primary
+                disabled={busy}
               />
-            </div>
-          )}
-
-          {/* Up next preview */}
-          {next && !isDone && (
-            <div className="mt-8 flex items-center gap-4 border border-ink-700/80 px-4 py-3">
-              <span className="eyebrow">Up next</span>
-              <div className="flex items-center gap-2">
-                <CommitteeImage slug={next[0].slug} name={next[0].name} className="h-7 w-7" />
-                <span className="text-sm text-ink-200">{next[0].shortName}</span>
-              </div>
-              <span className="font-mono text-xs text-ink-400">vs</span>
-              <div className="flex items-center gap-2">
-                <CommitteeImage slug={next[1].slug} name={next[1].name} className="h-7 w-7" />
-                <span className="text-sm text-ink-200">{next[1].shortName}</span>
-              </div>
             </div>
           )}
         </div>
@@ -180,10 +281,12 @@ function SwipeCard({
   committee,
   side,
   onChoose,
+  disabled,
 }: {
   committee: Committee;
   side: "left" | "right";
-  onChoose: () => void;
+  onChoose: (method: "swipe" | "card") => void;
+  disabled?: boolean;
 }) {
   const x = useMotionValue(0);
   const rotate = useTransform(x, [-200, 0, 200], [-12, 0, 12]);
@@ -191,14 +294,18 @@ function SwipeCard({
   const emberOpacity = useTransform(x, side === "left" ? [0, 40, 180] : [-180, -40, 0], side === "left" ? [0, 0, 1] : [1, 0, 0]);
   const [exiting, setExiting] = useState(false);
 
-  const handleDragEnd = (_: any, info: PanInfo) => {
+  const handleDragEnd = (_: unknown, info: PanInfo) => {
+    if (disabled) {
+      x.set(0);
+      return;
+    }
     const threshold = 110;
-    const dirRight = info.offset.x > threshold;
-    const dirLeft = info.offset.x < -threshold;
-    if ((side === "left" && dirRight) || (side === "right" && dirLeft)) {
+    const expectedSign = side === "left" ? -1 : 1;
+    const isVoteSwipe = info.offset.x * expectedSign > threshold;
+    if (isVoteSwipe) {
       setExiting(true);
       setTimeout(() => {
-        onChoose();
+        onChoose("swipe");
         setExiting(false);
         x.set(0);
       }, 180);
@@ -211,8 +318,8 @@ function SwipeCard({
     <AnimatePresence mode="wait">
       <motion.article
         key={committee.id}
-        drag="x"
-        style={{ x, rotate }}
+        drag={disabled ? false : "x"}
+        style={{ x, rotate, touchAction: "pan-y" }}
         onDragEnd={handleDragEnd}
         dragConstraints={{ left: 0, right: 0 }}
         dragElastic={0.4}
@@ -221,50 +328,33 @@ function SwipeCard({
         animate={{ opacity: exiting ? 0 : 1, y: 0, scale: exiting ? 0.92 : 1 }}
         exit={{ opacity: 0 }}
         transition={{ type: "spring", damping: 24, stiffness: 220 }}
-        className="relative flex cursor-grab flex-col overflow-hidden border border-ink-700/80 bg-ink-900 select-none"
+        className="relative flex h-full min-h-[220px] cursor-grab flex-col overflow-hidden border border-ink-700/80 bg-ink-900 p-4 select-none"
       >
-        <motion.span
-          style={{ opacity: limeOpacity }}
-          className="pointer-events-none absolute inset-0 z-10 border-2 border-lime"
-        />
-        <motion.span
-          style={{ opacity: emberOpacity }}
-          className="pointer-events-none absolute inset-0 z-10 border-2 border-ember"
-        />
+        <motion.span style={{ opacity: limeOpacity }} className="pointer-events-none absolute inset-0 z-10 border-2 border-lime" />
+        <motion.span style={{ opacity: emberOpacity }} className="pointer-events-none absolute inset-0 z-10 border-2 border-ember" />
 
-        <div className="relative h-72 w-full overflow-hidden bg-ink-800 md:h-80">
-          <img
-            src={`/committee_imgs/${committee.slug}.jpg`}
-            alt={committee.name}
-            className="h-full w-full object-cover"
-            draggable={false}
-          />
-          <span className="absolute left-3 top-3">
-            <CategoryChip category={committee.category} />
-          </span>
-          <span className="absolute right-3 top-3 border border-ink-50/40 bg-ink-950/60 px-2 py-1 backdrop-blur">
-            <span className="stat-num text-xs text-ink-50">{committee.elo}</span>
-            <span className="ml-1 font-mono text-[9px] uppercase tracking-widest text-ink-300">
-              elo
-            </span>
+        <div className="flex items-center justify-between">
+          <CategoryChip category={committee.category} />
+          <span className="font-mono text-[10px] uppercase tracking-widest text-ink-400">
+            {side === "left" ? "Left" : "Right"}
           </span>
         </div>
 
-        <div className="p-5">
-          <h3 className="display text-4xl text-ink-50">{committee.name}</h3>
-          <p className="italic-display text-base text-ink-300 mt-1">
+        <div className="mt-3 flex flex-1 flex-col items-center text-center">
+          <CommitteeImage
+            slug={committee.slug}
+            name={committee.name}
+            className="h-20 w-20 sm:h-24 sm:w-24 md:h-28 md:w-28"
+          />
+          <h3 className="mt-3 display text-xl text-ink-50 sm:text-2xl md:text-[1.65rem]">{committee.name}</h3>
+          <p className="italic-display mt-1 text-xs text-ink-300 sm:text-sm">
             “{committee.tagline}”
           </p>
 
-          <div className="mt-4 grid grid-cols-3 gap-3 border-t border-ink-700/80 pt-4">
-            <Mini label="Win Rate" value={`${committee.winRate.toFixed(0)}%`} />
-            <Mini label="Votes" value={committee.totalVotes.toLocaleString()} />
-            <Mini label="Δ Week" value={`${committee.delta >= 0 ? "+" : ""}${committee.delta}`} accent={committee.delta >= 0} />
-          </div>
-
           <button
-            onClick={onChoose}
-            className="mt-5 w-full border border-lime/40 py-3 font-mono text-[11px] uppercase tracking-widest text-lime transition-colors hover:bg-lime hover:text-ink-950"
+            disabled={disabled}
+            onClick={() => onChoose("card")}
+            className="mt-6 w-full border border-lime/40 py-2 font-mono text-[10px] uppercase tracking-widest text-lime transition-colors hover:bg-lime hover:text-ink-950 disabled:opacity-40"
           >
             Choose {committee.shortName} →
           </button>
@@ -273,8 +363,6 @@ function SwipeCard({
     </AnimatePresence>
   );
 }
-
-/* ---- bits ---- */
 
 function Counter({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (
@@ -291,15 +379,6 @@ function Tip({ n, children }: { n: string; children: React.ReactNode }) {
       <span className="font-mono text-[10px] uppercase tracking-widest text-ink-400">{n}</span>
       <span className="leading-snug">{children}</span>
     </li>
-  );
-}
-
-function Mini({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
-  return (
-    <div>
-      <p className="eyebrow">{label}</p>
-      <p className={`stat-num text-base mt-0.5 ${accent ? "text-lime" : "text-ink-50"}`}>{value}</p>
-    </div>
   );
 }
 
@@ -320,7 +399,7 @@ function ActionBtn({
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`flex items-center justify-center gap-2 px-4 py-4 font-mono text-[11px] uppercase tracking-widest transition-colors disabled:opacity-30 ${
+      className={`flex items-center justify-center gap-2 px-3 py-3 font-mono text-[10px] uppercase tracking-widest transition-colors disabled:opacity-30 ${
         primary
           ? "bg-ink-50 text-ink-950 hover:bg-lime"
           : "bg-ink-950 text-ink-100 hover:bg-ink-900"
@@ -334,14 +413,13 @@ function ActionBtn({
 
 function FinishedState({ onReset }: { onReset: () => void }) {
   return (
-    <div className="flex flex-col items-center justify-center border border-lime bg-ink-900 px-8 py-20 text-center">
+    <div className="flex h-full flex-col items-center justify-center border border-lime bg-ink-900 px-6 py-10 text-center sm:px-8 sm:py-12">
       <span className="eyebrow eyebrow-lime">Session complete</span>
-      <h3 className="mt-4 display text-7xl text-ink-50">
-        That's a <span className="italic-display text-lime">wrap</span>.
+      <h3 className="mt-3 display text-4xl text-ink-50 sm:text-5xl md:text-6xl">
+        That&apos;s a <span className="italic-display text-lime">wrap</span>.
       </h3>
-      <p className="mt-3 italic-display text-lg text-ink-300 max-w-md">
-        Every preference has been logged into the ELO matrix. Run another set or
-        switch modalities.
+      <p className="mt-3 italic-display text-base text-ink-300 max-w-md sm:text-lg">
+        Saved pairwise picks are in the Pollr Score. Run another set or switch modalities.
       </p>
       <button onClick={onReset} className="btn-lime mt-6">
         Reset Session

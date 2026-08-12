@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: pollr
+      POSTGRES_PASSWORD: pollr
+      POSTGRES_DB: pollr
+    ports:
+      - "5433:5432"
+    volumes:
+      - pollr_pg:/var/lib/postgresql/data
+      - ./api/scripts/local_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./api/scripts/seed_committees.sql:/docker-entrypoint-initdb.d/02_seed.sql:ro
+
+volumes:
+  pollr_pg:

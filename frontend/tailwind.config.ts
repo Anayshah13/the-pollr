@@ -32,6 +32,7 @@ const config: Config = {
       },
       fontFamily: {
         display: ['"Instrument Serif"', "ui-serif", "Georgia", "serif"],
+        pollr: ["var(--font-pollr)", "ui-sans-serif", "system-ui", "sans-serif"],
         sans: ['"Geist"', "ui-sans-serif", "system-ui", "sans-serif"],
         mono: ['"JetBrains Mono"', "ui-monospace", "Menlo", "monospace"],
       },

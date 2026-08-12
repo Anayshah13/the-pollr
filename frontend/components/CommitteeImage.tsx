@@ -2,24 +2,20 @@ interface Props {
   slug: string;
   name: string;
   className?: string;
-  /** "round" or "square" */
-  shape?: "round" | "square";
 }
 
-export function CommitteeImage({ slug, name, className = "", shape = "square" }: Props) {
+export function CommitteeImage({ slug, name, className = "" }: Props) {
   return (
     <span
-      className={`relative inline-block overflow-hidden bg-ink-800 ${
-        shape === "round" ? "rounded-full" : ""
-      } ${className}`}
+      className={`relative inline-flex shrink-0 overflow-hidden rounded-full bg-ink-800 ${className}`}
     >
       <img
         src={`/committee_imgs/${slug}.jpg`}
         alt={name}
-        className="h-full w-full object-cover"
+        className="block h-full w-full rounded-full object-cover [transform:translateZ(0)] scale-[1.1]"
         loading="lazy"
+        decoding="async"
       />
-      <span className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-ink-100/8" />
     </span>
   );
 }
