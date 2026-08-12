@@ -40,8 +40,14 @@ declare global {
 }
 
 function gtag(...args: unknown[]) {
-  if (!isGaEnabled() || typeof window.gtag !== "function") return;
-  window.gtag(...args);
+  if (typeof window === "undefined" || !GA_MEASUREMENT_ID) return;
+  if (typeof window.gtag === "function") {
+    window.gtag(...args);
+    return;
+  }
+  // Queue until the GA stub / script defines window.gtag
+  window.dataLayer = window.dataLayer || [];
+  window.dataLayer.push(args);
 }
 
 export function trackPageView(url: string, title?: string) {
